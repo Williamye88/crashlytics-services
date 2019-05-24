@@ -9,7 +9,7 @@ describe Service::Asana, :type => :service do
   describe 'schema and display configuration' do
     subject { Service::Asana }
 
-    it { is_expected.to include_password_field :api_key }
+    it { is_expected.to include_password_field :access_token }
     it { is_expected.to include_string_field :project_id }
   end
 
@@ -17,8 +17,8 @@ describe Service::Asana, :type => :service do
     let(:logger) { double('fake-logger', :log => nil) }
     let(:config) do
       {
-        :api_key => 'key',
-        :project_id => 'project_id_foo'
+        :access_token => 'key',
+        :project_id => '123'
       }
     end
     let(:service) { Service::Asana.new(config, lambda { |message| logger.log message }) }
@@ -51,15 +51,24 @@ describe Service::Asana, :type => :service do
 
     describe :receive_verification do
       it 'should succeed if API can authenticate and find project' do
-        stub_request(:get, "https://key:@app.asana.com/api/1.0/projects/project_id_foo").
+        stub_request(:get, "https://key:@app.asana.com/api/1.0/projects/123").
           to_return(:status => 200, :body => '{}')
 
         service.receive_verification
         expect(logger).to have_received(:log).with('verification successful')
       end
 
+      it 'allows the fallback use of a legacy api_key' do
+        stub_request(:get, "https://legacy-api-key:@app.asana.com/api/1.0/projects/123").
+          to_return(:status => 200, :body => '{}')
+
+        service = Service::Asana.new({ :project_id => '123', :api_key => 'legacy-api-key' }, lambda { |message| logger.log message })
+        service.receive_verification
+        expect(logger).to have_received(:log).with('verification successful')
+      end
+
       it 'should fail if API call raises an exception' do
-        stub_request(:get, "https://key:@app.asana.com/api/1.0/projects/project_id_foo").
+        stub_request(:get, "https://key:@app.asana.com/api/1.0/projects/123").
           to_return(:status => 403, :body => '')
 
         expect {
@@ -70,21 +79,15 @@ describe Service::Asana, :type => :service do
 
     describe :receive_issue_impact_change do
       let(:notes) { service.send :create_notes, issue }
-      let(:project_id) { 'project_id_foo' }
-      let(:expected_task_options) do
-        {
-          :name => 'foo title',
-          :notes => notes,
-          :projects => [project_id]
-        }
-      end
+      let(:project_id) { 123 }
+
       let(:project) { double(:id => project_id) }
       let(:workspace) { double(:id => 'workspace_id_foo') }
       let(:task) { double(:id => 'new_task_id') }
 
       before do
-        stub_request(:get, "https://key:@app.asana.com/api/1.0/projects/project_id_foo").
-          and_return(:status => 200, :body => '{"data":{"workspace":{"id":1}}}')
+        stub_request(:get, "https://key:@app.asana.com/api/1.0/projects/123").
+          and_return(:status => 200, :body => '{"data":{"id":123, "workspace":{"id":1}}}')
       end
 
       it 'should create a new Asana task' do
@@ -103,6 +106,25 @@ describe Service::Asana, :type => :service do
           service.receive_issue_impact_change issue
         }.to raise_error(Service::DisplayableError, /Asana task creation failed/)
       end
+
+      it 'should send correct task creation body' do
+        expected_task_body = {
+          :data => {
+            :workspace => 1,
+            :name => 'foo title',
+            :notes => notes,
+            :assignee =>'me',
+            :projects => ['123']
+          }
+        }
+
+        stub_request(:post, "https://key:@app.asana.com/api/1.0/tasks").
+          with(:body => expected_task_body).
+          to_return(:status => 200, :body => '')
+
+        service.receive_issue_impact_change issue
+        expect(logger).to have_received(:log).with('issue_impact_change successful')
+        end
     end
   end
 end

@@ -1,4 +1,25 @@
-=======
+5.7.6
+-----
+- Fix Pivotal to use v5 API
+
+5.7.4
+-----
+- Assign Asana tasks to the configured project.
+
+5.7.3
+-----
+- Add optional `component_id` to Jira integrations
+- Add optional `status_id`, `tracker_id`, and `project_id` fields to Redmine integrations
+- Add Flock appstore support to Flock
+
+5.7.2
+-----
+- Switch Asana to prefer `access_token` over `api_key`
+
+5.7.1
+-----
+- Add `issue_velocity_alert` support to Pagerduty
+
 5.7.0
 -----
 - Add Flock
